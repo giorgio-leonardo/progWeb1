@@ -1,0 +1,250 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package support;
+
+import db.DbManager;
+import db.Groups;
+import db.Invite;
+import db.User;
+import java.io.File;
+import java.io.PrintWriter;
+import java.sql.SQLException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Iterator;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.swing.JOptionPane;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PropertyConfigurator;
+
+/**
+ *
+ * @author giorgio
+ */
+public class Utils extends HttpServlet
+{
+    private static final org.apache.log4j.Logger log = Logger.getLogger(Utils.class);
+    public static final String gridBgColor = "#c0c0c0";
+      
+    public static String dateToString(Date date)
+    {
+        DateFormat df = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        if (date != null)
+            return df.format(date);
+        else
+            return null;
+    }
+    
+    public static void convertTimeStamp()
+    {
+        
+    }
+
+    public static String parsePostText(String postText)
+    {
+        String ret = "";
+        
+        return ret;
+    }
+    
+    public static void toLog(String message, String level)
+    {
+        level = level.toLowerCase();
+        PropertyConfigurator.configure(Utils.class.getClassLoader().getResource("support/log4j.properties"));
+
+        
+        switch(level)
+        {
+            case "f":
+                log.fatal(message);
+                break;
+            case "e":
+                log.error(message);
+                break;
+            case "w":
+                log.warn(message);
+                break;
+            case "i":
+                log.info(message);
+                break;
+            case "d":
+                log.debug(message);
+                break;
+        }
+    }
+ 
+    public static void pageHeader(PrintWriter out)
+    {
+        out.println("<!DOCTYPE html>");
+        out.println("<html lang=\"it\">");
+        out.println("   <head>");
+        out.println("   <div class=\"row\">");
+        out.println("       <div class=\"col-md-1\" style=\"background-color:#ffffff; border:0px\"></div>");
+        out.println("       <div class=\"col-md-10\" style=\"background-color:"+ gridBgColor + "\">");
+        out.println("           <meta charset=\"utf-8\">");
+        out.println("           <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">");
+        out.println("           <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
+        out.println("           <meta name=\"description\" content=\"\">");
+        out.println("           <meta name=\"author\" content=\"\">");
+        out.println("           <link rel=\"shortcut icon\" href=\"docs-assets/ico/favicon.png\">");
+        out.println("           <title>Programmazione web. Primo progetto.</title>");
+        out.println("           <link href=\"dist/css/bootstrap.css\" rel=\"stylesheet\">");
+        out.println("           <link href=\"dist/css/bootstrap-theme.min.css\" rel=\"stylesheet\">");
+        out.println("           <link href=\"dist/css/theme.css\" rel=\"stylesheet\">");
+        out.println("           <link href=\"dist/css/grid.css\" rel=\"stylesheet\">");
+        out.println("           <div class=\"page-header\">");
+        out.println("               <h1 align=\"center\">");
+        out.println("                   Introduzione alla programmazione per il Web<br>");
+        out.println("                   <small>Primo progetto</small>");
+        out.println("               </h1>");
+        out.println("           </div>");
+        out.println("   </head>");
+    }
+    
+    public static void printAlertNoRedir(PrintWriter out, HttpServletRequest request, String message)
+    {
+        out.println("<div class=\"alert alert-danger\" align = \"center\">");
+        out.println("   <strong>Errore!</strong> " + message + ".");
+        out.println("</div>");
+    }
+    
+    public static void printAlert(PrintWriter out, HttpServletRequest request, String message, String redirect)
+    {
+        out.println("<meta HTTP-EQUIV=\"REFRESH\" content=\"1; url=" + request.getContextPath() + "/" + redirect + "\">");
+        out.println("<div class=\"alert alert-danger\" align = \"center\">");
+        out.println("   <strong>Errore!</strong> " + message + ".");
+        out.println("</div>");
+    }
+    
+    public static void printInviesTable(PrintWriter out, HttpServletRequest request, HttpServletResponse response, DbManager manager, Integer userID) throws ServletException
+    {
+        ArrayList<Invite> invites = new ArrayList<Invite>();
+        
+        try
+        {
+            invites = manager.getInvitesForUser(userID);
+        }
+        catch (SQLException e)
+        {
+            Utils.toLog(e.getMessage(), "e");
+            throw new ServletException(e);
+        }
+
+        out.println("<div class=\"row\" style=\"background-color:" + Utils.gridBgColor + "; border:0px\">");
+        out.println("   <div class=\"col-md-10\" style=\"background-color:" + Utils.gridBgColor + "; border:0px\">");
+        
+        Iterator<Invite> i = invites.iterator();
+        while(i.hasNext())
+        {
+            Invite u = i.next();
+            out.println("       <div class=\"input-group\">");
+            out.println("           <input type=\"text\" class=\"form-control\" value=\"" + manager.getGroupName(u.getGroupID()) + "\" readonly>");
+            out.println("               <span class=\"input-group-addon\">");
+            out.println("               <input type=\"checkbox\" name=\"chk\" value=\"" + u.getGroupID() + "\">");
+            out.println("           </span>");
+            out.println("       </div>");
+        }
+        out.println("   </div>");
+            
+        out.println("</div>");
+        
+
+    }
+    
+    public static void printGroupsTable(PrintWriter out, HttpServletRequest request, HttpServletResponse response, DbManager manager, Integer userID) throws ServletException
+    {
+        ArrayList<GroupsForUser> groups = new ArrayList<GroupsForUser>();
+        try
+        {
+            groups = manager.getGroupsForUser(userID);
+        }
+        catch(SQLException e)
+        {
+            Utils.toLog(e.getMessage(), "e");
+            throw new ServletException(e);
+        }
+        
+        //out.println("<div class=\"row\" style=\"background-color:" + Utils.gridBgColor + "; border:0px\">");
+        //out.println("   <div class=\"col-md-10\" style=\"background-color:" + Utils.gridBgColor + "; border:0px\">");
+                
+        Iterator<GroupsForUser> i = groups.iterator();
+        while(i.hasNext())
+        {
+            GroupsForUser g = i.next();
+            out.println("       <div class=\"input-group\">");
+            if (g.getUserIsAdmin())
+                out.println("           <input type=\"text\" class=\"form-control\" style=\"color:#00ff00\" value=\"" + g.getGroupName() + "\" readonly>");
+            else
+                out.println("           <input type=\"text\" class=\"form-control\" value=\"" + g.getGroupName() + "\" readonly>");
+                
+            out.println("               <span class=\"input-group-addon\">");
+            out.println("               <input type=\"radio\" name=\"rdb\" value=\"" + g.getGroupId() + "\">");
+            out.println("           </span>");
+            out.println("       </div>");
+        }
+        //out.println("   </div>");
+            
+        //out.println("</div>");
+    }
+    
+    public static void printUsersTable(PrintWriter out, HttpServletRequest request, HttpServletResponse response, DbManager manager, Integer userID) throws ServletException
+    {
+        ArrayList<User> users = new ArrayList<User>();
+        try
+        {
+            users = manager.getUsers(userID);
+        }
+        catch(SQLException e)
+        {
+            Utils.toLog(e.getMessage(), "e");
+            throw new ServletException(e);
+        }
+        
+        out.println("<div class=\"row\" style=\"background-color:" + Utils.gridBgColor + "; border:0px\">");
+        out.println("   <div class=\"col-md-10\" style=\"background-color:" + Utils.gridBgColor + "; border:0px\">");
+                
+        Iterator<User> i = users.iterator();
+        while(i.hasNext())
+        {
+            User u = i.next();
+            out.println("       <div class=\"input-group\">");
+            out.println("           <input type=\"text\" class=\"form-control\" value=\"" + u.getUserName() + "\" readonly>");
+            out.println("               <span class=\"input-group-addon\">");
+            out.println("               <input type=\"checkbox\" name=\"chk\" value=\"" + u.getUserName() + "\">");
+            out.println("           </span>");
+            out.println("       </div>");
+        }
+        out.println("   </div>");
+            
+        out.println("</div>");
+        
+    }
+    
+    
+    public static void pageFooter(PrintWriter out)
+    {
+        out.println("           </div>");
+        out.println("       <div class=\"col-md-1\" style=\"background-color:#ffffff; border:0px\"></div>");
+        out.println("   </div");
+        out.println("<footer>");
+        out.println("   <p align=\"center\">Giorgio Leonardo. Matricola 151879</p>");
+        out.println("</footer>");
+        out.println("</html>");
+    }
+    
+    public static void createGroupFolder(String path, String groupName)
+    {
+        JOptionPane.showMessageDialog(null, path + "/" + groupName);
+        File dir = new File(path + "/" + groupName);
+        dir.mkdir();
+    }
+}

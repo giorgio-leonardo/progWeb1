@@ -1,0 +1,648 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package db;
+
+import java.io.IOException;
+import java.io.Serializable;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Iterator;
+import javax.servlet.ServletException;
+import support.GroupsForUser;
+import support.PostsForGroup;
+import support.Utils;
+
+/**
+ *
+ * @author giorgio
+ */
+public class DbManager implements Serializable
+{
+    private transient Connection conn;
+    
+    public DbManager(String dbUrl) throws SQLException
+    {
+        try
+        {
+            Class.forName("org.apache.derby.jdbc.ClientDriver", true, getClass().getClassLoader());
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e.toString(), e);
+        }
+        
+        Connection conn = DriverManager.getConnection(dbUrl);
+        
+        this.conn = conn;
+    }
+    
+    public static void shutdown()
+    {
+        try
+        {
+            DriverManager.getConnection("jdbc:derby:;shutdown=true");
+        }
+        catch(SQLException e)
+        {
+            Utils.toLog(DbManager.class.getName() + ": " + e.getMessage(), "e");
+        }
+    }
+    
+    public synchronized User authenticate(String userName, String userPwd) throws SQLException
+    {
+        User user = null;
+        PreparedStatement stm = conn.prepareStatement
+        (
+            "SELECT * FROM users WHERE userName = ? AND userPwd = ?"
+        );
+        
+        try
+        {
+            stm.setString(1, userName);
+            stm.setString(2, userPwd);
+            
+            ResultSet rs = stm.executeQuery();
+            try
+            {
+                if(rs.next())
+                {
+                    user = new User();
+                    
+                    user.setUserID(rs.getInt("userId"));
+                    user.setUserName(userName);
+                    user.setUserAvatar(rs.getString("userAvatar"));
+                    user.setUserPwd(rs.getString("userPwd"));
+                }
+            }
+            finally
+            {
+                rs.close();
+            }
+        }
+        finally
+        {
+            stm.close();
+        }    
+        
+        return user;
+    }
+    
+    public synchronized Boolean userHasInvites(Integer userID) throws ServletException
+    {
+        Boolean ret = false;
+        
+        try
+        {
+            PreparedStatement stm;
+            stm = conn.prepareStatement
+            (
+                "SELECT * FROM invite WHERE userID = ?"
+            );
+
+            stm.setInt(1, userID);
+            try
+            {
+                ResultSet rs = stm.executeQuery();
+                try
+                {
+                    if (rs.next())
+                    {
+                        ret = true;
+                    }
+                }
+                finally
+                {
+                    rs.close();
+                }
+            }
+            finally
+            {
+                stm.close();
+            }
+        }
+        catch (SQLException e)
+        {
+            Utils.toLog(getClass().getName() + ": " + e.getMessage(), "e");
+            throw new ServletException(e);
+        }
+        return ret;
+    }
+    
+    public synchronized Integer insertPost(Integer groupID, Integer userID, String postText) throws SQLException
+    {
+        PreparedStatement stm;
+        Integer maxPostID = 0;
+        
+        stm = conn.prepareStatement("SELECT MAX(postID) AS m FROM post");
+        try
+        {
+            ResultSet rs = stm.executeQuery();
+            try
+            {
+                if (rs.next())
+                {
+                    maxPostID = rs.getInt("m");
+                }
+            }
+            finally
+            {
+                rs.close();
+            }
+        }
+        finally
+        {
+            stm.close();
+        }
+        
+        
+        maxPostID++;
+        //---------------------------------------
+        
+        java.util.Date javaDate = new java.util.Date();
+        java.sql.Timestamp sqlTimestamp = new java.sql.Timestamp(javaDate.getTime());
+        
+        stm = conn.prepareStatement
+        (
+            "INSERT INTO post (postID, groupID, userID, postDataCreation, postText)" +
+            " VALUES (?, ?, ?, ?, ?)"
+        );
+        stm.setInt(1, maxPostID);
+        stm.setInt(2, groupID);
+        stm.setInt(3, userID);
+        stm.setTimestamp(4, sqlTimestamp);
+        stm.setString(5, postText);
+        
+        try
+        {
+            Boolean rs = stm.execute();
+        }
+        finally
+        {
+            stm.close();
+        }
+        return maxPostID;
+    }
+    
+    public synchronized Integer insertPostFiles(ArrayList<PostFile> postFiles) throws SQLException
+    {
+        PreparedStatement stm;
+        Integer maxPostFileID = 0;
+        
+        Iterator<PostFile> i = postFiles.iterator();
+        
+        while(i.hasNext())
+        {
+            PostFile p = i.next();
+            
+            stm = conn.prepareStatement("SELECT MAX(postFileID) AS m FROM postFile");
+            try
+            {
+                ResultSet rs = stm.executeQuery();
+                try
+                {
+                    if (rs.next())
+                    {
+                        maxPostFileID = rs.getInt("m");
+                    }
+                }
+                finally
+                {
+                    rs.close();
+                }
+            }
+            finally
+            {
+                stm.close();
+            }
+
+
+            maxPostFileID++;
+            //---------------------------------------
+
+            java.util.Date javaDate = new java.util.Date();
+            java.sql.Timestamp sqlTimestamp = new java.sql.Timestamp(javaDate.getTime());
+
+            stm = conn.prepareStatement
+            (
+                "INSERT INTO postFile (postFileID, postID, postFileOriginalFileName, postFileFileSystemName, postFileType)" +
+                " VALUES (?, ?, ?, ?, ?)"
+            );
+            stm.setInt(1, maxPostFileID);
+            stm.setInt(2, p.getPostID());
+            stm.setString(3, p.getPostFileOriginalFileName());
+            stm.setString(4, p.getPostFileFileSystemName());
+            stm.setString(5, p.getPostFileType());
+
+            try
+            {
+                Boolean rs = stm.execute();
+            }
+            finally
+            {
+                stm.close();
+            }
+        }
+        return maxPostFileID;
+    }
+    
+    public synchronized void insertUserInGroup (Integer groupID, Integer userID) throws SQLException
+    {
+        PreparedStatement stm;
+        stm = conn.prepareStatement
+        (
+            "INSERT INTO groupUser (groupID, userID, userIsAdmin) VALUES (?, ?, ?)"
+        );
+        
+        stm.setInt(1, groupID);
+        stm.setInt(2, userID);
+        stm.setBoolean(3, true);
+        
+        try
+        {
+            Boolean rs = stm.execute();
+            
+        }
+        finally
+        {
+            stm.close();
+        }
+    }
+    
+    public synchronized void acceptInvites(Integer groupID, Integer userID, Boolean isAdmin) throws SQLException
+    {
+        PreparedStatement stm;
+        stm = conn.prepareStatement
+        (
+            "INSERT INTO groupUser (groupID, userID, userIsAdmin) VALUES (?, ?, ?)"
+        );
+        
+        stm.setInt(1, groupID);
+        stm.setInt(2, userID);
+        stm.setBoolean(3, isAdmin);
+        
+        try
+        {
+            Boolean rs = stm.execute();
+            
+        }
+        finally
+        {
+            stm.close();
+        }
+        
+        stm = conn.prepareStatement
+        (
+            "DELETE FROM invite WHERE groupID = ? AND userID = ?"
+        );
+        
+        stm.setInt(1, groupID);
+        stm.setInt(2, userID);
+        
+        try
+        {
+            Boolean rs = stm.execute();
+            
+        }
+        finally
+        {
+            stm.close();
+        }
+            
+    }
+        
+    
+    public synchronized Integer createGroup(Integer userID, String groupName) throws SQLException
+    {
+        PreparedStatement stm;
+        Integer maxGroupID = 0;
+        
+        stm = conn.prepareStatement("SELECT MAX(groupID) AS m FROM groups");
+        try
+        {
+            ResultSet rs = stm.executeQuery();
+            try
+            {
+                if (rs.next())
+                {
+                    maxGroupID = rs.getInt("m");
+                }
+            }
+            finally
+            {
+                rs.close();
+            }
+        }
+        finally
+        {
+            stm.close();
+        }
+        
+        
+        maxGroupID++;
+        //---------------------------------------
+        
+        java.util.Date javaDate = Calendar.getInstance().getTime();
+        java.sql.Date sqlDate = new java.sql.Date(javaDate.getTime());
+        
+        stm = conn.prepareStatement
+        (
+            "INSERT INTO groups (groupID, userID, groupName, groupDataCreation)" +
+            " VALUES (?, ?, ?, ?)"
+        );
+        stm.setInt(1, maxGroupID);
+        stm.setInt(2, userID);
+        stm.setString(3, groupName);
+        stm.setDate(4, sqlDate);
+        
+        try
+        {
+            Boolean rs = stm.execute();
+        }
+        finally
+        {
+            stm.close();
+        }
+        return maxGroupID;
+    }
+    
+    public synchronized String getGroupName(Integer groupID) throws ServletException
+    {
+        String ret = "";
+        try
+        {
+            PreparedStatement stm = conn.prepareStatement
+            (
+                "SELECT groupName FROM groups WHERE groupID = ?"
+            );
+        
+            stm.setInt(1, groupID);
+            try
+            {
+                ResultSet rs = stm.executeQuery();
+                try
+                {
+                    if(rs.next())
+                    {
+                        ret = rs.getString("groupName");
+                    }
+                }
+                finally
+                {
+                    rs.close();
+                }
+            }
+            finally
+            {
+                stm.close();
+            }
+            
+        }
+        catch (SQLException e)
+        {
+            Utils.toLog(getClass().getName() + ": " + e.getMessage(), "e");
+            throw new ServletException(e);
+        }
+        
+        return ret;
+    }
+    
+    public synchronized ArrayList<GroupsForUser> getGroupsForUser(Integer userID) throws SQLException
+    {
+        ArrayList<GroupsForUser> groups = new ArrayList<GroupsForUser>();
+        PreparedStatement stm = conn.prepareStatement
+        (
+            "SELECT t1.groupID AS gID, t1.userID, t1.userIsAdmin AS uIA, t2.groupName AS gN, t2.groupDataCreation AS gDC" +
+            " FROM groupUser AS t1 " +
+            " JOIN groups AS t2 ON t1.groupID = t2.groupID" +
+            " WHERE t1.userID = ?"
+        );
+        stm.setInt(1, userID);
+        
+        Utils.toLog(userID.toString(), "i");
+        
+        try
+        {
+            ResultSet rs = stm.executeQuery();
+            try
+            {
+                while(rs.next())
+                {
+                    GroupsForUser group = new GroupsForUser();
+
+                    group.setUserId(userID);
+                    group.setGroupId(rs.getInt("gID"));
+                    group.setGroupName(rs.getString("gN"));
+                    group.setGroupDataCreation(rs.getDate("gDC"));
+                    group.setUserIsAdmin(rs.getBoolean("uIA"));
+
+                    groups.add(group);
+                }
+                    
+            }
+            finally
+            {
+                rs.close();
+            }
+        }
+        finally
+        {
+            stm.close();
+        }
+        
+        return groups;
+    }
+    
+    public synchronized ArrayList<Invite> getInvitesForUser(Integer userID) throws SQLException
+    {
+        ArrayList<Invite> invites = new ArrayList<Invite>();
+        PreparedStatement stm = conn.prepareStatement
+        (
+            "SELECT * FROM invite WHERE userID = ?"
+        );
+        
+        stm.setInt(1, userID);
+        try
+        {
+            ResultSet rs = stm.executeQuery();
+            try
+            {
+                while(rs.next())
+                {
+                    Invite invite = new Invite();
+                    
+                    invite.setGroupID(rs.getInt("groupID"));
+                    invite.setUserID(rs.getInt("userID"));
+                    invites.add(invite);
+                }
+            }
+            finally
+            {
+                rs.close();
+            }
+        }
+        finally
+        {
+            stm.close();
+        }
+        
+        return invites;
+    }
+        
+    
+    public synchronized void insertIvites(Integer groupID, ArrayList<User> users) throws SQLException
+    {
+        PreparedStatement stm = conn.prepareStatement
+        (
+            "INSERT INTO invite (groupID, userID) values (?, ?)"
+        );
+        
+        try
+        {
+            Iterator<User> i = users.iterator();
+            while(i.hasNext())
+            {
+                User u = i.next();
+                stm.setInt(1, groupID);
+                stm.setInt(2, u.getUserID());
+                stm.execute();
+            }
+        }
+        finally
+        {
+            stm.close();
+        }
+    }
+    
+    public synchronized ArrayList<User> getUsers(Integer userID) throws SQLException
+    {
+        ArrayList<User> users = new ArrayList<User>();
+        PreparedStatement stm;
+        stm = conn.prepareStatement
+        (
+            "SELECT * FROM users WHERE userID <> ?"
+        );
+        stm.setInt(1, userID);
+        
+        try
+        {
+            ResultSet rs = stm.executeQuery();
+            try
+            {
+                while(rs.next())
+                {
+                    User user = new User();
+                    
+                    user.setUserID(rs.getInt("userID"));
+                    user.setUserName(rs.getString("userName"));
+                    user.setUserPwd(rs.getString("userPwd"));
+                    user.setUserAvatar(rs.getString("userAvatar"));
+                    
+                    users.add(user);
+                }
+            }
+            finally
+            {
+                rs.close();
+            }
+        }
+        finally
+        {
+            stm.close();
+        }
+        
+        return users;
+    }
+    
+    public synchronized ArrayList<PostsForGroup> getPostsForGroup(Integer groupID) throws SQLException
+    {
+        ArrayList<PostsForGroup> postsFG = new ArrayList<PostsForGroup>();
+        PreparedStatement stm;
+        stm = conn.prepareStatement
+        (
+            "SELECT t1.postID AS pID, t1.groupID AS gID, t1.userID AS uID, t1.postDataCreation AS pDC, t1.postText as pT, " + 
+            "       t2.userName AS uN, t2.userAvatar AS uA " +
+            "   FROM post AS t1" +
+            "   JOIN users AS t2 ON t1.userID = t2.userID " +
+            "   WHERE t1.groupID = ? " + 
+            "   ORDER BY pDC DESC"
+        );
+        stm.setInt(1, groupID);
+        
+        try
+        {
+            ResultSet rs = stm.executeQuery();
+            try
+            {
+                while(rs.next())
+                {
+                    PostsForGroup p = new PostsForGroup();
+        
+                    p.setPostID(rs.getInt("pID"));
+                    p.setGroupID(rs.getInt("gID"));
+                    p.setUserID(rs.getInt("uID"));
+                    p.setPostDataCreation(rs.getTimestamp("pDC"));
+                    p.setPostText(Utils.clobToString(rs.getClob("pT")));
+                    p.setUserName(rs.getString("uN"));
+                    p.setUserAvatar(rs.getString("uA"));
+                    
+                    postsFG.add(p);
+                }
+            }
+            finally
+            {
+                
+            }
+        }
+        finally
+        {
+            stm.close();
+        }
+        
+        return postsFG;
+    }
+    
+    public synchronized User getUserFromUserName(String userName) throws SQLException
+    {
+        User user = new User();
+        PreparedStatement stm;
+        stm = conn.prepareStatement
+        (
+            "SELECT * FROM users WHERE userName = ?"
+        );
+        stm.setString(1, userName);
+        
+        try
+        {
+            ResultSet rs = stm.executeQuery();
+            try
+            {
+                while(rs.next())
+                {
+                    user.setUserID(rs.getInt("userID"));
+                    user.setUserName(rs.getString("userName"));
+                    user.setUserPwd(rs.getString("userPwd"));
+                    user.setUserAvatar(rs.getString("userAvatar"));
+                  }
+            }
+            finally
+            {
+                rs.close();
+            }
+        }
+        finally
+        {
+            stm.close();
+        }
+        
+        return user;
+    }
+}
